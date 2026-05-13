@@ -1,0 +1,19 @@
+#!/bin/sh
+#放在/etc/ppp/目录下，确保可执行权限，当ppp连接成功后会自动执行这个脚本，参数IFNAME是ppp分配的接口名称，如ppp0，ppp1等
+LOGFILE="/tmp/ppp-ipv6.log"
+echo "$(date): ip-up triggered, IFNAME=$IFNAME" >> $LOGFILE
+sleep 2
+(
+  echo "$(date): waiting for RA on $IFNAME..." >> $LOGFILE
+  PREFIXINFO=$(/usr/sbin/tcpdump -v -i $IFNAME -c 1 icmp6 and 'ip6[40] = 134' 2>/dev/null | grep prefix)
+  if [ -z "$PREFIXINFO" ]; then
+    echo "$(date): no RA received, giving up" >> $LOGFILE
+    exit 1
+  fi
+  PREFIX=$(echo $PREFIXINFO | cut -f2- -d: | cut -f1 -d/ | cut -c2-)
+  PREFIXLEN=$(echo $PREFIXINFO | cut -f2 -d/ | cut -f1 -d,)
+  /sbin/ifconfig $IFNAME inet6 ${PREFIX}cafe/${PREFIXLEN}
+  /sbin/route add -inet6 default -interface $IFNAME
+  echo "$(date): IPv6 configured: ${PREFIX}cafe/${PREFIXLEN}" >> $LOGFILE
+) &
+exit 0
